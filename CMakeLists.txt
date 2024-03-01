@@ -539,3 +539,27 @@ endif()
 
 add_subdirectory(third_party)
 add_subdirectory(velox)
+
+# no velox_hive_connector because it need to be linked manually
+# static library for all targets currently used
+add_library(velox_all STATIC)
+target_link_libraries(
+  velox_all
+  PUBLIC
+  velox_buffer
+  velox_codegen
+  velox_core
+  velox_exec
+  velox_expression
+  velox_flag_definitions
+  velox_type
+  velox_vector
+  velox_substrait_plan_converter
+  velox_parse_parser
+  velox_presto_serializer
+  velox_functions_lib
+  velox_functions_prestosql
+  velox_dwio_common_exception
+  velox_presto_serializer
+  velox_vector_test_lib
+  velox_dwio_common_test_utils)
