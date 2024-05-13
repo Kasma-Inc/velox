@@ -18,6 +18,21 @@ set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH}
 include(ExternalProject)
 
 if(VELOX_ENABLE_ARROW)
+  find_package(Arrow)
+  if(Arrow_FOUND)
+  find_package(Thrift REQUIRED)
+  find_package(Parquet CONFIG REQUIRED)
+
+  add_library(thrift STATIC IMPORTED GLOBAL)
+  add_library(arrow STATIC IMPORTED GLOBAL)
+  add_library(arrow_testing STATIC IMPORTED GLOBAL)
+  add_library(parquet STATIC IMPORTED GLOBAL)
+  set_property(TARGET thrift PROPERTY INTERFACE_INCLUDE_DIRECTORIES ${THRIFT_INCLUDE_DIR})
+  set_property(TARGET thrift PROPERTY IMPORTED_LOCATION ${THRIFT_LIB})
+  set_target_properties(arrow arrow_testing parquet PROPERTIES INTERFACE_INCLUDE_DIRECTORIES "${ARROW_INCLUDE_DIR};${THRIFT_INCLUDE_DIR}")
+  set_target_properties(arrow PROPERTIES IMPORTED_LOCATION ${ARROW_STATIC_LIB})
+  set_target_properties(parquet PROPERTIES IMPORTED_LOCATION ${PARQUET_STATIC_LIB})
+  else()
   find_package(Thrift)
   if(Thrift_FOUND)
     set(THRIFT_SOURCE "SYSTEM")
@@ -93,4 +108,5 @@ if(VELOX_ENABLE_ARROW)
   set_target_properties(parquet PROPERTIES IMPORTED_LOCATION
                                            ${ARROW_LIBDIR}/libparquet.a)
 
+endif() # Arrow_FOUND
 endif()
