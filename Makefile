@@ -93,6 +93,7 @@ cmake:					#: Use CMake to create a Makefile build system
 		-DVELOX_ENABLE_HIVE_CONNECTOR=ON \
 		-DVELOX_ENABLE_S3=ON \
 		-DVELOX_ENABLE_PARQUET=ON \
+		-DVELOX_CODEGEN_SUPPORT=OFF \
 
 cmake-gpu:
 	$(MAKE) EXTRA_CMAKE_FLAGS=-DVELOX_ENABLE_GPU=ON cmake
@@ -178,3 +179,4 @@ python-build:
 python-test: 
 	$(MAKE) python-build extras="[tests]"
 	DEBUG=1 ${PYTHON_EXECUTABLE} -m unittest -v
+	
