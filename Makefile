@@ -85,7 +85,15 @@ cmake:					#: Use CMake to create a Makefile build system
 		$(GENERATOR) \
 		$(USE_CCACHE) \
 		$(FORCE_COLOR) \
-		${EXTRA_CMAKE_FLAGS}
+		${EXTRA_CMAKE_FLAGS} \
+		-DVELOX_BUILD_TESTING=OFF \
+		-DVELOX_BUILD_TEST_UTILS=ON \
+		-DVELOX_ENABLE_SUBSTRAIT=ON \
+		-DVELOX_ENABLE_TPCH_CONNECTOR=ON \
+		-DVELOX_ENABLE_HIVE_CONNECTOR=ON \
+		-DVELOX_ENABLE_S3=ON \
+		-DVELOX_ENABLE_PARQUET=ON \
+		-DVELOX_CODEGEN_SUPPORT=OFF \
 
 cmake-gpu:
 	$(MAKE) EXTRA_CMAKE_FLAGS=-DVELOX_ENABLE_GPU=ON cmake
@@ -171,3 +179,4 @@ python-build:
 python-test: 
 	$(MAKE) python-build extras="[tests]"
 	DEBUG=1 ${PYTHON_EXECUTABLE} -m unittest -v
+	
