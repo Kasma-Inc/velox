@@ -28,7 +28,11 @@ target_link_libraries(
             velox_vector
             Folly::folly
             fmt::fmt)
-
+install(TARGETS velox_link_libs  EXPORT ${PROJECT_NAME}Targets
+RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+)
 add_subdirectory(common)
 add_subdirectory(catalog)
 add_subdirectory(dwrf)

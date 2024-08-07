@@ -106,7 +106,7 @@ debug:					#: Build with debugging symbols
 	$(MAKE) build BUILD_DIR=debug -j ${NUM_THREADS}
 
 release:				#: Build the release version
-	$(MAKE) cmake BUILD_DIR=release BUILD_TYPE=Release && \
+	$(MAKE) cmake BUILD_DIR=release BUILD_TYPE=RelWithDebugInfo && \
 	$(MAKE) build BUILD_DIR=release
 
 min_debug:				#: Minimal build with debugging symbols

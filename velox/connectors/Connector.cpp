@@ -42,6 +42,11 @@ bool registerConnectorFactory(std::shared_ptr<ConnectorFactory> factory) {
   return true;
 }
 
+bool unregisterConnectorFactory(const std::string& factoryName) {
+  auto count = connectorFactories().erase(factoryName);
+  return count==1;
+}
+
 std::shared_ptr<ConnectorFactory> getConnectorFactory(
     const std::string& connectorName) {
   auto it = connectorFactories().find(connectorName);

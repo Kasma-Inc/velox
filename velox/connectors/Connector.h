@@ -416,6 +416,7 @@ class ConnectorFactory {
 /// FB_ANONYMOUS_VARIABLE.
 bool registerConnectorFactory(std::shared_ptr<ConnectorFactory> factory);
 
+bool unregisterConnectorFactory(const std::string &);
 /// Returns a factory for creating connectors with the specified name. Throws if
 /// factory doesn't exist.
 std::shared_ptr<ConnectorFactory> getConnectorFactory(
