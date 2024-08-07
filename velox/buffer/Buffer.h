@@ -178,17 +178,21 @@ class Buffer {
   // classes. Because of the virtual function dispatch, it's unlikely the
   // compiler can inline it, so we make it only called in the debug build.
   void setEndGuard() {
-#ifndef NDEBUG
+    // (ljw): there are some buggy issues on NDEBUG flag,So I just comment it
+    // and Flavius will set and check wheather on Debug Or Release mode.
+    // #ifndef NDEBUG
     setEndGuardImpl();
-#endif
+    // #endif
   }
 
   virtual void setEndGuardImpl() {}
 
   void checkEndGuard() const {
-#ifndef NDEBUG
+    // (ljw): there are some buggy issues on NDEBUG flag,So I just comment it
+    // and Flavius will set and check wheather on Debug Or Release mode.
+    // #ifndef NDEBUG
     checkEndGuardImpl();
-#endif
+    // #endif
   }
 
   // Checks the magic number at capacity() to detect overrun. No-op
@@ -498,10 +502,14 @@ class AlignedBuffer : public Buffer {
 
  protected:
   void setEndGuardImpl() override {
+    // LOG(ERROR) << "setEndGuardImpl data_:" << static_cast<const void*>(data_)
+    //            << " capacity_:" << capacity_;
     *reinterpret_cast<uint64_t*>(data_ + capacity_) = kEndGuard;
   }
 
   void checkEndGuardImpl() const override {
+    // LOG(ERROR) << "checkEndGuardImpl data_:" << static_cast<const void*>(data_)
+    //            << " capacity_:" << capacity_;
     if (*reinterpret_cast<uint64_t*>(data_ + capacity_) != kEndGuard) {
       VELOX_FAIL("Write past Buffer capacity() {}", capacity_);
     }

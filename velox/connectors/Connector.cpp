@@ -32,7 +32,7 @@ std::unordered_map<std::string, std::shared_ptr<Connector>>& connectors() {
 } // namespace
 
 bool registerConnectorFactory(std::shared_ptr<ConnectorFactory> factory) {
-  factory->initialize();
+
   bool ok =
       connectorFactories().insert({factory->connectorName(), factory}).second;
   VELOX_CHECK(
@@ -40,6 +40,11 @@ bool registerConnectorFactory(std::shared_ptr<ConnectorFactory> factory) {
       "ConnectorFactory with name '{}' is already registered",
       factory->connectorName());
   return true;
+}
+
+bool unregisterConnectorFactory(const std::string& factoryName) {
+  auto count = connectorFactories().erase(factoryName);
+  return count==1;
 }
 
 std::shared_ptr<ConnectorFactory> getConnectorFactory(
