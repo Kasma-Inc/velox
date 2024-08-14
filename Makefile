@@ -66,6 +66,14 @@ ifdef CUDA_FLAGS
 CMAKE_FLAGS += -DCMAKE_CUDA_FLAGS="$(CUDA_FLAGS)"
 endif
 
+CMAKE_FLAGS += -DVELOX_BUILD_TEST_UTILS=ON
+CMAKE_FLAGS += -DVELOX_ENABLE_SUBSTRAIT=ON
+CMAKE_FLAGS += -DVELOX_ENABLE_TPCH_CONNECTOR=ON
+CMAKE_FLAGS += -DVELOX_ENABLE_HIVE_CONNECTOR=ON
+CMAKE_FLAGS += -DVELOX_ENABLE_S3=ON
+CMAKE_FLAGS += -DVELOX_ENABLE_PARQUET=ON
+CMAKE_FLAGS += -DVELOX_CODEGEN_SUPPORT=OFF
+
 # Use Ninja if available. If Ninja is used, pass through parallelism control flags.
 USE_NINJA ?= 1
 ifeq ($(USE_NINJA), 1)
@@ -114,7 +122,7 @@ debug:					#: Build with debugging symbols
 	$(MAKE) build BUILD_DIR=debug
 
 release:				#: Build the release version
-	$(MAKE) cmake BUILD_DIR=release BUILD_TYPE=Release && \
+	$(MAKE) cmake BUILD_DIR=release BUILD_TYPE=RelWithDebInfo && \
 	$(MAKE) build BUILD_DIR=release
 
 minimal_debug:			#: Minimal build with debugging symbols

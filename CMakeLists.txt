@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-cmake_minimum_required(VERSION 3.28)
+cmake_minimum_required(VERSION 3.20)
 message(STATUS "Building using CMake version: ${CMAKE_VERSION}")
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED TRUE)
@@ -453,6 +453,7 @@ velox_resolve_dependency(
   uc
   tu)
 
+set(Boost_USE_STATIC_RUNTIME ON)
 set(BOOST_INCLUDE_LIBRARIES
     atomic
     context
@@ -466,6 +467,7 @@ set(BOOST_INCLUDE_LIBRARIES
 velox_set_source(Boost)
 velox_resolve_dependency(Boost 1.77.0 COMPONENTS ${BOOST_INCLUDE_LIBRARIES})
 
+set(GFLAGS_USE_TARGET_NAMESPACE TRUE)
 velox_set_source(gflags)
 
 velox_resolve_dependency(gflags COMPONENTS ${VELOX_GFLAGS_TYPE})
