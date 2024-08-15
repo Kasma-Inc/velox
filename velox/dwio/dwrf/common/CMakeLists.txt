@@ -41,9 +41,19 @@ velox_link_libraries(
   protobuf::libprotobuf)
 
 # required for the wrapped protobuf headers/sources
-velox_include_directories(velox_dwio_dwrf_common PUBLIC ${PROJECT_BINARY_DIR})
+velox_include_directories(
+  velox_dwio_dwrf_common
+  PUBLIC $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}>
+         $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
 
 if(NOT VELOX_MONO_LIBRARY)
   # trigger generation of pb files
   add_dependencies(velox_dwio_dwrf_common dwio_proto)
 endif()
+
+install(
+  DIRECTORY wrap
+  DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/velox/dwio/dwrf/common"
+  FILES_MATCHING
+  PATTERN "*.inc"
+  PATTERN "*.h")

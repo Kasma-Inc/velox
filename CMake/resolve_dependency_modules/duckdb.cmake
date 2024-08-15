@@ -28,6 +28,10 @@ message(STATUS "Building DuckDB from source")
 # twice. Velox already does this. We need fix-duckdbversion.patch as DuckDB
 # tries to infer the version via a git commit hash or git tag. This inference
 # can lead to errors when building in another git project such as Prestissimo.
+
+# fix the problem in duckdb cmakelist file when duckdb is included as a
+# subproject, since duckdb uses CMAKE_SOURCE_DIR instead of
+# CMAKE_CURRENT_SOURCE_DIR to refer to its own source directory
 FetchContent_Declare(
   duckdb
   URL ${VELOX_DUCKDB_SOURCE_URL}
@@ -35,6 +39,7 @@ FetchContent_Declare(
   PATCH_COMMAND
     git apply ${CMAKE_CURRENT_LIST_DIR}/duckdb/remove-ccache.patch && git apply
     ${CMAKE_CURRENT_LIST_DIR}/duckdb/fix-duckdbversion.patch && git apply
+    ${CMAKE_CURRENT_LIST_DIR}/duckdb/duckdb_config.patch && git apply
     ${CMAKE_CURRENT_LIST_DIR}/duckdb/re2.patch)
 
 set(BUILD_UNITTESTS OFF)
@@ -42,8 +47,10 @@ set(ENABLE_SANITIZER OFF)
 set(ENABLE_UBSAN OFF)
 set(BUILD_SHELL OFF)
 set(EXPORT_DLL_SYMBOLS OFF)
-set(PREVIOUS_BUILD_TYPE ${CMAKE_BUILD_TYPE})
-set(CMAKE_BUILD_TYPE Release)
+# Must use the same build type for cmake install, otherwise the imported location will not be found for duckdb
+# set(PREVIOUS_BUILD_TYPE ${CMAKE_BUILD_TYPE})
+
+# set(CMAKE_BUILD_TYPE Release)
 set(PREVIOUS_CMAKE_CXX_FLAGS ${CMAKE_CXX_FLAGS})
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-non-virtual-dtor")
 
@@ -54,4 +61,4 @@ if("${CMAKE_CXX_COMPILER_ID}" MATCHES "GNU")
 endif()
 
 set(CMAKE_CXX_FLAGS ${PREVIOUS_CMAKE_CXX_FLAGS})
-set(CMAKE_BUILD_TYPE ${PREVIOUS_BUILD_TYPE})
+# set(CMAKE_BUILD_TYPE ${PREVIOUS_BUILD_TYPE})

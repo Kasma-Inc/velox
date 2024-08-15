@@ -92,3 +92,10 @@ endif()
 if(VELOX_BUILD_PYTHON_PACKAGE)
   add_subdirectory(python)
 endif()
+
+install(
+  DIRECTORY external/utf8proc
+  DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/velox/external"
+  FILES_MATCHING
+  PATTERN "*.inc"
+  PATTERN "*.h")
