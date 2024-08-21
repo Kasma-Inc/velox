@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-.PHONY: all cmake build clean debug release unit
+.PHONY: all cmake build clean debug release rel_with_deb_info unit
 
 SHELL=/bin/bash
 BUILD_BASE_DIR=_build
@@ -126,8 +126,12 @@ debug:					#: Build with debugging symbols
 	$(MAKE) build BUILD_DIR=debug
 
 release:				#: Build the release version
-	$(MAKE) cmake BUILD_DIR=release BUILD_TYPE=RelWithDebInfo && \
+	$(MAKE) cmake BUILD_DIR=release BUILD_TYPE=Release && \
 	$(MAKE) build BUILD_DIR=release
+
+rel_with_deb_info:
+	$(MAKE) cmake BUILD_DIR=rel_with_deb_info BUILD_TYPE=RelWithDebInfo && \
+	$(MAKE) build BUILD_DIR=rel_with_deb_info
 
 minimal_debug:			#: Minimal build with debugging symbols
 	$(MAKE) cmake BUILD_DIR=debug BUILD_TYPE=debug EXTRA_CMAKE_FLAGS="${EXTRA_CMAKE_FLAGS} -DVELOX_BUILD_MINIMAL=ON"
