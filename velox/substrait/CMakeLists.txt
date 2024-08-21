@@ -76,10 +76,9 @@ install(
 
 install(
   DIRECTORY ${substrait_proto_directory}
-  DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/velox/substrait/proto/substrait
+  DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/velox/substrait/proto
   FILES_MATCHING
-  PATTERN "*.inc"
-  PATTERN "*.h")
+  PATTERN "*.proto")
 
 if(${VELOX_BUILD_TESTING})
   add_subdirectory(tests)
