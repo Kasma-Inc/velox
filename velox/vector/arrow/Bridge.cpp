@@ -15,6 +15,11 @@
  */
 
 #include "velox/vector/arrow/Bridge.h"
+#include <arrow/array/array_base.h>
+#include <arrow/array/builder_primitive.h>
+#include <arrow/c/bridge.h>
+#include <velox/type/Type.h>
+#include <velox/vector/BaseVector.h>
 
 #include "velox/buffer/Buffer.h"
 #include "velox/common/base/BitUtil.h"
@@ -261,12 +266,21 @@ const char* exportArrowFormatTimestampStr(
 const char* exportArrowFormatStr(
     const TypePtr& type,
     const ArrowOptions& options,
-    std::string& formatBuffer) {
+    std::string& formatBuffer,
+    std::function<std::optional<const char*>(const TypePtr&)> formatFunc =
+        nullptr) {
   if (type->isDecimal()) {
     // Decimal types encode the precision, scale values.
     const auto& [precision, scale] = getDecimalPrecisionScale(*type);
     formatBuffer = fmt::format("d:{},{}", precision, scale);
     return formatBuffer.c_str();
+  }
+
+  if (formatFunc) {
+    auto format = formatFunc(type);
+    if (format.has_value()) {
+      return format.value();
+    }
   }
 
   switch (type->kind()) {
@@ -1134,6 +1148,14 @@ void exportConstant(
     ArrowArray& out,
     memory::MemoryPool* pool,
     VeloxToArrowBridgeHolder& holder) {
+  if (vec.type()->isUnKnown()) {
+    std::shared_ptr<arrow::Array> null_array;
+    arrow::NullBuilder null_builder;
+    auto status = null_builder.AppendNulls(vec.size());
+    null_array = null_builder.Finish().ValueOrDie();
+    status = arrow::ExportArray(*null_array, &out);
+    return;
+  }
   // As per Arrow spec, REE has zero buffers and two children, `run_ends` and
   // `values`.
   out.n_buffers = 0;
@@ -1208,8 +1230,15 @@ void exportToArrowImpl(
     default:
       VELOX_NYI("{} cannot be exported to Arrow yet.", vec.encoding());
   }
-  out.private_data = holder.release();
-  out.release = releaseArrowArray;
+  if (!vec.type()->isUnKnown()) {
+    out.private_data = holder.release();
+    out.release = releaseArrowArray;
+  } else {
+    if (out.release == nullptr) {
+      out.private_data = holder.release();
+      out.release = releaseArrowArray;
+    }
+  }
 }
 
 // Parses the velox decimal format from the given arrow format.
@@ -1252,9 +1281,16 @@ TypePtr parseDecimalFormat(const char* format) {
 
 TypePtr importFromArrowImpl(
     const char* format,
-    const ArrowSchema& arrowSchema) {
+    const ArrowSchema& arrowSchema,
+    std::function<std::optional<TypePtr>(const char* format)> typeFunc =
+        nullptr) {
   VELOX_CHECK_NOT_NULL(format);
-
+  if (typeFunc) {
+    auto type = typeFunc(format);
+    if (type.has_value()) {
+      return type.value();
+    }
+  }
   switch (format[0]) {
     case 'b':
       return BOOLEAN();
@@ -1315,7 +1351,7 @@ TypePtr importFromArrowImpl(
         case 'l':
           VELOX_CHECK_EQ(arrowSchema.n_children, 1);
           VELOX_CHECK_NOT_NULL(arrowSchema.children[0]);
-          return ARRAY(importFromArrow(*arrowSchema.children[0]));
+          return ARRAY(importFromArrow(*arrowSchema.children[0], typeFunc));
 
         // Map.
         case 'm': {
@@ -1327,8 +1363,8 @@ TypePtr importFromArrowImpl(
           VELOX_CHECK_NOT_NULL(child.children[0]);
           VELOX_CHECK_NOT_NULL(child.children[1]);
           return MAP(
-              importFromArrow(*child.children[0]),
-              importFromArrow(*child.children[1]));
+              importFromArrow(*child.children[0], typeFunc),
+              importFromArrow(*child.children[1], typeFunc));
         }
 
         // Struct/rows.
@@ -1341,7 +1377,8 @@ TypePtr importFromArrowImpl(
 
           for (size_t i = 0; i < arrowSchema.n_children; ++i) {
             VELOX_CHECK_NOT_NULL(arrowSchema.children[i]);
-            childTypes.emplace_back(importFromArrow(*arrowSchema.children[i]));
+            childTypes.emplace_back(
+                importFromArrow(*arrowSchema.children[i], typeFunc));
             childNames.emplace_back(
                 arrowSchema.children[i]->name != nullptr
                     ? arrowSchema.children[i]->name
@@ -1355,7 +1392,7 @@ TypePtr importFromArrowImpl(
           VELOX_CHECK_EQ(arrowSchema.n_children, 2);
           VELOX_CHECK_NOT_NULL(arrowSchema.children[1]);
           // The Velox type is the type of the `values` child.
-          return importFromArrow(*arrowSchema.children[1]);
+          return importFromArrow(*arrowSchema.children[1], typeFunc);
 
         default:
           break;
@@ -1383,7 +1420,8 @@ void exportToArrow(
 void exportToArrow(
     const VectorPtr& vec,
     ArrowSchema& arrowSchema,
-    const ArrowOptions& options) {
+    const ArrowOptions& options,
+    std::function<std::optional<const char*>(const TypePtr&)> formatFunc) {
   auto& type = vec->type();
 
   arrowSchema.name = nullptr;
@@ -1403,8 +1441,8 @@ void exportToArrow(
     if (options.flattenDictionary) {
       // Dictionary data is flattened. Set the underlying data types.
       arrowSchema.dictionary = nullptr;
-      arrowSchema.format =
-          exportArrowFormatStr(type, options, bridgeHolder->formatBuffer);
+      arrowSchema.format = exportArrowFormatStr(
+          type, options, bridgeHolder->formatBuffer, formatFunc);
     } else {
       arrowSchema.format = "i";
       bridgeHolder->dictionary = std::make_unique<ArrowSchema>();
@@ -1427,8 +1465,8 @@ void exportToArrow(
     if (valueVector != nullptr) {
       exportToArrow(valueVector, *valuesChild, options);
     } else {
-      valuesChild->format =
-          exportArrowFormatStr(type, options, bridgeHolder->formatBuffer);
+      valuesChild->format = exportArrowFormatStr(
+          type, options, bridgeHolder->formatBuffer, formatFunc);
     }
     valuesChild->name = "values";
 
@@ -1442,7 +1480,7 @@ void exportToArrow(
           vec->isScalar(), "Flattening is only supported for scalar types.");
     }
     arrowSchema.format =
-        exportArrowFormatStr(type, options, bridgeHolder->formatBuffer);
+        exportArrowFormatStr(type, options, bridgeHolder->formatBuffer, formatFunc);
     arrowSchema.dictionary = nullptr;
 
     if (type->kind() == TypeKind::MAP) {
@@ -1501,7 +1539,7 @@ void exportToArrow(
         try {
           auto& currentSchema = bridgeHolder->childrenOwned[i];
           currentSchema = std::make_unique<ArrowSchema>();
-          exportToArrow(rows.childAt(i), *currentSchema, options);
+          exportToArrow(rows.childAt(i), *currentSchema, options, formatFunc);
           currentSchema->name = bridgeHolder->rowType->nameOf(i).data();
           arrowSchema.children[i] = currentSchema.get();
         } catch (const VeloxException&) {
@@ -1526,7 +1564,9 @@ void exportToArrow(
   arrowSchema.private_data = bridgeHolder.release();
 }
 
-TypePtr importFromArrow(const ArrowSchema& arrowSchema) {
+TypePtr importFromArrow(
+    const ArrowSchema& arrowSchema,
+    std::function<std::optional<TypePtr>(const char* format)> typeFunc) {
   // For dictionaries, format encodes the index type, while the dictionary value
   // is encoded in the dictionary member, as per
   // https://arrow.apache.org/docs/format/CDataInterface.html#dictionary-encoded-arrays.
@@ -1535,7 +1575,7 @@ TypePtr importFromArrow(const ArrowSchema& arrowSchema) {
                                               : arrowSchema.format;
   ArrowSchema schema =
       arrowSchema.dictionary ? *arrowSchema.dictionary : arrowSchema;
-  return importFromArrowImpl(format, schema);
+  return importFromArrowImpl(format, schema, typeFunc);
 }
 
 namespace {
@@ -1568,7 +1608,9 @@ VectorPtr importFromArrowImpl(
     ArrowSchema& arrowSchema,
     ArrowArray& arrowArray,
     memory::MemoryPool* pool,
-    bool isViewer);
+    bool isViewer,
+    std::function<std::optional<TypePtr>(const char* format)> typeFunc =
+        nullptr);
 
 RowVectorPtr createRowVector(
     memory::MemoryPool* pool,
@@ -1576,7 +1618,9 @@ RowVectorPtr createRowVector(
     BufferPtr nulls,
     const ArrowSchema& arrowSchema,
     const ArrowArray& arrowArray,
-    bool isViewer) {
+    bool isViewer,
+    std::function<std::optional<TypePtr>(const char* format)> typeFunc =
+        nullptr) {
   VELOX_CHECK_EQ(arrowArray.n_children, rowType->size());
 
   // Recursively create the children vectors.
@@ -1585,7 +1629,11 @@ RowVectorPtr createRowVector(
 
   for (size_t i = 0; i < arrowArray.n_children; ++i) {
     childrenVector.push_back(importFromArrowImpl(
-        *arrowSchema.children[i], *arrowArray.children[i], pool, isViewer));
+        *arrowSchema.children[i],
+        *arrowArray.children[i],
+        pool,
+        isViewer,
+        typeFunc));
   }
   return std::make_shared<RowVector>(
       pool,
@@ -1616,7 +1664,9 @@ ArrayVectorPtr createArrayVector(
     const ArrowSchema& arrowSchema,
     const ArrowArray& arrowArray,
     bool isViewer,
-    WrapInBufferViewFunc wrapInBufferView) {
+    WrapInBufferViewFunc wrapInBufferView,
+    std::function<std::optional<TypePtr>(const char* format)> typeFunc =
+        nullptr) {
   static_assert(sizeof(vector_size_t) == sizeof(int32_t));
   VELOX_CHECK_EQ(arrowArray.n_buffers, 2);
   VELOX_CHECK_EQ(arrowArray.n_children, 1);
@@ -1625,7 +1675,11 @@ ArrayVectorPtr createArrayVector(
   auto sizes =
       computeSizes(offsets->as<vector_size_t>(), arrowArray.length, pool);
   auto elements = importFromArrowImpl(
-      *arrowSchema.children[0], *arrowArray.children[0], pool, isViewer);
+      *arrowSchema.children[0],
+      *arrowArray.children[0],
+      pool,
+      isViewer,
+      typeFunc);
   return std::make_shared<ArrayVector>(
       pool,
       type,
@@ -1644,7 +1698,9 @@ MapVectorPtr createMapVector(
     const ArrowSchema& arrowSchema,
     const ArrowArray& arrowArray,
     bool isViewer,
-    WrapInBufferViewFunc wrapInBufferView) {
+    WrapInBufferViewFunc wrapInBufferView,
+    std::function<std::optional<TypePtr>(const char* format)> typeFunc =
+        nullptr) {
   VELOX_CHECK_EQ(arrowArray.n_buffers, 2);
   VELOX_CHECK_EQ(arrowArray.n_children, 1);
   auto offsets = wrapInBufferView(
@@ -1653,7 +1709,11 @@ MapVectorPtr createMapVector(
       computeSizes(offsets->as<vector_size_t>(), arrowArray.length, pool);
   // Arrow wraps keys and values into a struct.
   auto entries = importFromArrowImpl(
-      *arrowSchema.children[0], *arrowArray.children[0], pool, isViewer);
+      *arrowSchema.children[0],
+      *arrowArray.children[0],
+      pool,
+      isViewer,
+      typeFunc);
   VELOX_CHECK(entries->type()->isRow());
   const auto& rows = *entries->asUnchecked<RowVector>();
   VELOX_CHECK_EQ(rows.childrenSize(), 2);
@@ -1676,7 +1736,9 @@ VectorPtr createDictionaryVector(
     const ArrowSchema& arrowSchema,
     const ArrowArray& arrowArray,
     bool isViewer,
-    WrapInBufferViewFunc wrapInBufferView) {
+    WrapInBufferViewFunc wrapInBufferView,
+    std::function<std::optional<TypePtr>(const char* format)> typeFunc =
+        nullptr) {
   VELOX_CHECK_EQ(arrowArray.n_buffers, 2);
   VELOX_CHECK_NOT_NULL(arrowArray.dictionary);
   static_assert(sizeof(vector_size_t) == sizeof(int32_t));
@@ -1686,9 +1748,13 @@ VectorPtr createDictionaryVector(
       "Only int32 indices are supported for arrow conversion");
   auto indices = wrapInBufferView(
       arrowArray.buffers[1], arrowArray.length * sizeof(vector_size_t));
-  auto type = importFromArrow(*arrowSchema.dictionary);
+  auto type = importFromArrow(*arrowSchema.dictionary, typeFunc);
   auto wrapped = importFromArrowImpl(
-      *arrowSchema.dictionary, *arrowArray.dictionary, pool, isViewer);
+      *arrowSchema.dictionary,
+      *arrowArray.dictionary,
+      pool,
+      isViewer,
+      typeFunc);
   return BaseVector::wrapInDictionary(
       std::move(nulls),
       std::move(indices),
@@ -1700,7 +1766,9 @@ VectorPtr createVectorFromReeArray(
     memory::MemoryPool* pool,
     const ArrowSchema& arrowSchema,
     const ArrowArray& arrowArray,
-    bool isViewer) {
+    bool isViewer,
+    std::function<std::optional<TypePtr>(const char* format)> typeFunc =
+        nullptr) {
   VELOX_CHECK_EQ(arrowArray.n_children, 2);
   VELOX_CHECK_EQ(arrowSchema.n_children, 2);
 
@@ -1708,10 +1776,15 @@ VectorPtr createVectorFromReeArray(
   VELOX_CHECK_EQ(arrowArray.null_count, 0);
 
   auto values = importFromArrowImpl(
-      *arrowSchema.children[1], *arrowArray.children[1], pool, isViewer);
+      *arrowSchema.children[1],
+      *arrowArray.children[1],
+      pool,
+      isViewer,
+      typeFunc);
 
   const auto& runEndSchema = *arrowSchema.children[0];
-  auto runEndType = importFromArrowImpl(runEndSchema.format, runEndSchema);
+  auto runEndType =
+      importFromArrowImpl(runEndSchema.format, runEndSchema, typeFunc);
   VELOX_CHECK_EQ(
       runEndType->kind(),
       TypeKind::INTEGER,
@@ -1914,7 +1987,9 @@ VectorPtr importFromArrowImpl(
     ArrowArray& arrowArray,
     memory::MemoryPool* pool,
     bool isViewer,
-    WrapInBufferViewFunc wrapInBufferView) {
+    WrapInBufferViewFunc wrapInBufferView,
+    std::function<std::optional<TypePtr>(const char* format)> typeFunc =
+        nullptr) {
   VELOX_USER_CHECK_NOT_NULL(arrowSchema.release, "arrowSchema was released.");
   VELOX_USER_CHECK_NOT_NULL(arrowArray.release, "arrowArray was released.");
   VELOX_USER_CHECK_EQ(
@@ -1925,7 +2000,7 @@ VectorPtr importFromArrowImpl(
       arrowArray.length, 0, "Array length needs to be non-negative.");
 
   // First parse and generate a Velox type.
-  auto type = importFromArrow(arrowSchema);
+  auto type = importFromArrow(arrowSchema, typeFunc);
 
   // Wrap the nulls buffer into a Velox BufferView (zero-copy). Null buffer size
   // needs to be at least one bit per element.
@@ -1945,7 +2020,8 @@ VectorPtr importFromArrowImpl(
   }
 
   if (arrowSchema.dictionary) {
-    auto indexType = importFromArrowImpl(arrowSchema.format, arrowSchema);
+    auto indexType =
+        importFromArrowImpl(arrowSchema.format, arrowSchema, typeFunc);
     return createDictionaryVector(
         pool,
         indexType,
@@ -1953,11 +2029,13 @@ VectorPtr importFromArrowImpl(
         arrowSchema,
         arrowArray,
         isViewer,
-        wrapInBufferView);
+        wrapInBufferView,
+        typeFunc);
   }
 
   if (isREE(arrowSchema)) {
-    return createVectorFromReeArray(pool, arrowSchema, arrowArray, isViewer);
+    return createVectorFromReeArray(
+        pool, arrowSchema, arrowArray, isViewer, typeFunc);
   }
 
   // String data types (VARCHAR and VARBINARY).
@@ -2016,13 +2094,31 @@ VectorPtr importFromArrowImpl(
         nulls,
         arrowSchema,
         arrowArray,
-        isViewer);
+        isViewer,
+        typeFunc);
   } else if (type->isArray()) {
     return createArrayVector(
-        pool, type, nulls, arrowSchema, arrowArray, isViewer, wrapInBufferView);
+        pool,
+        type,
+        nulls,
+        arrowSchema,
+        arrowArray,
+        isViewer,
+        wrapInBufferView,
+        typeFunc);
   } else if (type->isMap()) {
     return createMapVector(
-        pool, type, nulls, arrowSchema, arrowArray, isViewer, wrapInBufferView);
+        pool,
+        type,
+        nulls,
+        arrowSchema,
+        arrowArray,
+        isViewer,
+        wrapInBufferView,
+        typeFunc);
+  } else if (type->isUnKnown()) {
+    return facebook::velox::BaseVector::createNullConstant(
+        facebook::velox::UNKNOWN(), arrowArray.length, pool);
   } else if (type->isPrimitiveType()) {
     // Other primitive types.
 
@@ -2053,10 +2149,16 @@ VectorPtr importFromArrowImpl(
     ArrowSchema& arrowSchema,
     ArrowArray& arrowArray,
     memory::MemoryPool* pool,
-    bool isViewer) {
+    bool isViewer,
+    std::function<std::optional<TypePtr>(const char* format)> typeFunc) {
   if (isViewer) {
     return importFromArrowImpl(
-        arrowSchema, arrowArray, pool, isViewer, wrapInBufferViewAsViewer);
+        arrowSchema,
+        arrowArray,
+        pool,
+        isViewer,
+        wrapInBufferViewAsViewer,
+        typeFunc);
   }
 
   // This Vector will take over the ownership of `arrowSchema` and `arrowArray`
@@ -2090,7 +2192,8 @@ VectorPtr importFromArrowImpl(
       [&schemaReleaser, &arrayReleaser](const void* buffer, size_t length) {
         return wrapInBufferViewAsOwner(
             buffer, length, schemaReleaser, arrayReleaser);
-      });
+      },
+      typeFunc);
 
   arrowSchema.release = nullptr;
   arrowArray.release = nullptr;
@@ -2103,19 +2206,22 @@ VectorPtr importFromArrowImpl(
 VectorPtr importFromArrowAsViewer(
     const ArrowSchema& arrowSchema,
     const ArrowArray& arrowArray,
-    memory::MemoryPool* pool) {
+    memory::MemoryPool* pool,
+    std::function<std::optional<TypePtr>(const char* format)> typeFunc) {
   return importFromArrowImpl(
       const_cast<ArrowSchema&>(arrowSchema),
       const_cast<ArrowArray&>(arrowArray),
       pool,
-      true);
+      true,
+      typeFunc);
 }
 
 VectorPtr importFromArrowAsOwner(
     ArrowSchema& arrowSchema,
     ArrowArray& arrowArray,
-    memory::MemoryPool* pool) {
-  return importFromArrowImpl(arrowSchema, arrowArray, pool, false);
+    memory::MemoryPool* pool,
+    std::function<std::optional<TypePtr>(const char* format)> typeFunc) {
+  return importFromArrowImpl(arrowSchema, arrowArray, pool, false, typeFunc);
 }
 
 } // namespace facebook::velox
