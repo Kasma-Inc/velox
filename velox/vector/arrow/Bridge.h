@@ -96,7 +96,9 @@ void exportToArrow(
 void exportToArrow(
     const VectorPtr&,
     ArrowSchema&,
-    const ArrowOptions& = ArrowOptions{});
+    const ArrowOptions& = ArrowOptions{},
+    std::function<std::optional<const char*>(const TypePtr&)> formatFunc =
+        nullptr);
 
 /// Import an ArrowSchema into a Velox Type object.
 ///
@@ -115,7 +117,10 @@ void exportToArrow(
 ///
 ///   arrowSchema.release(&arrowSchema);
 ///
-TypePtr importFromArrow(const ArrowSchema& arrowSchema);
+TypePtr importFromArrow(
+    const ArrowSchema& arrowSchema,
+    std::function<std::optional<TypePtr>(const char* format)> typeFunc =
+        nullptr);
 
 /// Import an ArrowArray and ArrowSchema into a Velox vector.
 ///
@@ -144,7 +149,9 @@ TypePtr importFromArrow(const ArrowSchema& arrowSchema);
 VectorPtr importFromArrowAsViewer(
     const ArrowSchema& arrowSchema,
     const ArrowArray& arrowArray,
-    memory::MemoryPool* pool);
+    memory::MemoryPool* pool,
+    std::function<std::optional<TypePtr>(const char* format)> typeFunc =
+        nullptr);
 
 /// Import an ArrowArray and ArrowSchema into a Velox vector, acquiring
 /// ownership over the input data.
@@ -161,6 +168,8 @@ VectorPtr importFromArrowAsViewer(
 VectorPtr importFromArrowAsOwner(
     ArrowSchema& arrowSchema,
     ArrowArray& arrowArray,
-    memory::MemoryPool* pool);
+    memory::MemoryPool* pool,
+    std::function<std::optional<TypePtr>(const char* format)> typeFunc =
+        nullptr);
 
 } // namespace facebook::velox
