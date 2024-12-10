@@ -1850,13 +1850,28 @@ VectorPtr importFromArrowImpl(
         nulls,
         arrowSchema,
         arrowArray,
-        isViewer);
+        isViewer,
+        typeFunc);
   } else if (type->isArray()) {
     return createArrayVector(
-        pool, type, nulls, arrowSchema, arrowArray, isViewer, wrapInBufferView);
+        pool,
+        type,
+        nulls,
+        arrowSchema,
+        arrowArray,
+        isViewer,
+        wrapInBufferView,
+        typeFunc);
   } else if (type->isMap()) {
     return createMapVector(
-        pool, type, nulls, arrowSchema, arrowArray, isViewer, wrapInBufferView);
+        pool,
+        type,
+        nulls,
+        arrowSchema,
+        arrowArray,
+        isViewer,
+        wrapInBufferView,
+        typeFunc);
   } else if (type->isUnKnown()) {
     return facebook::velox::BaseVector::createNullConstant(
         facebook::velox::UNKNOWN(), arrowArray.length, pool);
