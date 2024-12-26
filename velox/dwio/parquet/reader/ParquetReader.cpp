@@ -664,6 +664,10 @@ TypePtr ReaderBase::convertType(
       case thrift::Type::type::INT32:
         return INTEGER();
       case thrift::Type::type::INT64:
+        if (schemaElement.logicalType.__isset.TIMESTAMP) {
+          return TIMESTAMP();
+        }
+
         return BIGINT();
       case thrift::Type::type::INT96:
         return TIMESTAMP(); // INT96 only maps to a timestamp
