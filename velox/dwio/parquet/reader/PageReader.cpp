@@ -23,6 +23,7 @@
 #include "velox/dwio/parquet/thrift/ThriftTransport.h"
 #include "velox/vector/FlatVector.h"
 
+#include <common/base/Exceptions.h>
 #include <thrift/protocol/TCompactProtocol.h> // @manual
 
 using facebook::velox::common::testutil::TestValue;
@@ -341,6 +342,14 @@ void PageReader::prepareDictionary(const PageHeader& pageHeader) {
       timestampAdjustment = Timestamp::kMillisecondsInSecond;
     } else if (type_->logicalType_->TIMESTAMP.unit.__isset.MICROS) {
       timestampAdjustment = Timestamp::kMicrosecondsInMillisecond * Timestamp::kMillisecondsInSecond;
+    } else if (type_->logicalType_->TIMESTAMP.unit.__isset.NANOS) {
+      timestampAdjustment = Timestamp::kNanosInSecond;
+    } else {
+      std::stringstream oss;
+      type_->logicalType_->TIMESTAMP.unit.printTo(oss);
+      VELOX_USER_FAIL(
+          "Unsupported timestamp unit for dictionary encoding: {}",
+          oss.str());
     }
 
     auto parquetTypeSize = sizeof(int64_t);
@@ -368,9 +377,9 @@ void PageReader::prepareDictionary(const PageHeader& pageHeader) {
       int64_t val;
       memcpy(&val, parquetValues + i * parquetTypeSize, sizeof(int64_t));
 
-      int64_t second = val / timestampAdjustment;
-      uint64_t nano = (val % timestampAdjustment) * (Timestamp::kNanosInSecond / timestampAdjustment);
-      values[i] = Timestamp(second, nano);
+      int64_t seconds = val / timestampAdjustment;
+      uint64_t nanos = (val % timestampAdjustment) * (Timestamp::kNanosInSecond / timestampAdjustment);
+      values[i] = Timestamp(seconds, nanos);
     }
     return;
   }
