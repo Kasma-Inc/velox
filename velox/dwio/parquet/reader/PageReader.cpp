@@ -338,9 +338,9 @@ void PageReader::prepareDictionary(const PageHeader& pageHeader) {
   if (type_->logicalType_->__isset.TIMESTAMP) {
     auto timestampAdjustment = 1;
     if (type_->logicalType_->TIMESTAMP.unit.__isset.MILLIS) {
-      timestampAdjustment *= Timestamp::kNanosecondsInMillisecond;
+      timestampAdjustment  = Timestamp::kMillisecondsInSecond;
     } else if (type_->logicalType_->TIMESTAMP.unit.__isset.MICROS) {
-      timestampAdjustment *= Timestamp::kNanosecondsInMicrosecond;
+      timestampAdjustment = Timestamp::kMicrosecondsInMillisecond * Timestamp::kMillisecondsInSecond;
     }
 
     auto parquetTypeSize = sizeof(int64_t);
@@ -367,7 +367,10 @@ void PageReader::prepareDictionary(const PageHeader& pageHeader) {
       // 00:00:00.000000 on 1 January 1970.
       int64_t val;
       memcpy(&val, parquetValues + i * parquetTypeSize, sizeof(int64_t));
-      values[i] = Timestamp::fromNanos(val * timestampAdjustment);
+
+      int64_t second = val / timestampAdjustment;
+      uint64_t nano = (val % timestampAdjustment) * (Timestamp::kNanosInSecond / timestampAdjustment);
+      values[i] = Timestamp(second, nano);
     }
     return;
   }
