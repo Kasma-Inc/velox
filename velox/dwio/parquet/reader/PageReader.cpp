@@ -16,6 +16,7 @@
 
 #include "velox/dwio/parquet/reader/PageReader.h"
 
+#include "common/base/Exceptions.h"
 #include "dwio/parquet/thrift/ParquetThriftTypes.h"
 #include "velox/common/testutil/TestValue.h"
 #include "velox/dwio/common/BufferUtil.h"
@@ -23,7 +24,6 @@
 #include "velox/dwio/parquet/thrift/ThriftTransport.h"
 #include "velox/vector/FlatVector.h"
 
-#include <common/base/Exceptions.h>
 #include <thrift/protocol/TCompactProtocol.h> // @manual
 
 using facebook::velox::common::testutil::TestValue;
