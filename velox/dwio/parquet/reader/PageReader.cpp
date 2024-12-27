@@ -338,7 +338,7 @@ void PageReader::prepareDictionary(const PageHeader& pageHeader) {
   if (type_->logicalType_->__isset.TIMESTAMP) {
     auto timestampAdjustment = 1;
     if (type_->logicalType_->TIMESTAMP.unit.__isset.MILLIS) {
-      timestampAdjustment  = Timestamp::kMillisecondsInSecond;
+      timestampAdjustment = Timestamp::kMillisecondsInSecond;
     } else if (type_->logicalType_->TIMESTAMP.unit.__isset.MICROS) {
       timestampAdjustment = Timestamp::kMicrosecondsInMillisecond * Timestamp::kMillisecondsInSecond;
     }
