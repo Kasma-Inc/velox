@@ -16,6 +16,7 @@
 #pragma once
 
 #include <string_view>
+#include <utility>
 
 #include "velox/common/base/Crc.h"
 #include "velox/common/compression/Compression.h"
@@ -45,15 +46,18 @@ class PrestoVectorSerde : public VectorSerde {
  public:
   // Input options that the serializer recognizes.
   struct PrestoOptions : VectorSerde::Options {
-    PrestoOptions() = default;
+    PrestoOptions(){};
 
     PrestoOptions(
         bool _useLosslessTimestamp,
-        common::CompressionKind _compressionKind,
-        bool _nullsFirst = false)
+        common::CompressionKind _compressionKind =
+            common::CompressionKind::CompressionKind_NONE,
+        bool _nullsFirst = false,
+        float _minCompressionRatio = 0.8)
         : VectorSerde::Options(_compressionKind),
           useLosslessTimestamp(_useLosslessTimestamp),
-          nullsFirst(_nullsFirst) {}
+          nullsFirst(_nullsFirst),
+          minCompressionRatio(_minCompressionRatio) {}
 
     /// Currently presto only supports millisecond precision and the serializer
     /// converts velox native timestamp to that resulting in loss of precision.
@@ -73,6 +77,9 @@ class PrestoVectorSerde : public VectorSerde {
     /// times compression misses the target the less frequently it is tried.
     float minCompressionRatio{0.8};
   };
+
+  explicit PrestoVectorSerde(PrestoOptions opts = {})
+      : opts_(std::move(opts)) {}
 
   /// Adds the serialized sizes of the rows of 'vector' in 'ranges[i]' to
   /// '*sizes[i]'.
@@ -187,7 +194,11 @@ class PrestoVectorSerde : public VectorSerde {
       std::vector<Token>& out,
       const Options* options = nullptr);
 
-  static void registerVectorSerde();
+  static void registerVectorSerde(
+      const PrestoVectorSerde::PrestoOptions& opts = {});
+
+ private:
+  const PrestoVectorSerde::PrestoOptions opts_;
 };
 
 class PrestoOutputStreamListener : public OutputStreamListener {

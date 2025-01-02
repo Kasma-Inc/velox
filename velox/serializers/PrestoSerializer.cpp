@@ -172,15 +172,21 @@ std::string_view typeToEncodingName(const TypePtr& type) {
 }
 
 PrestoVectorSerde::PrestoOptions toPrestoOptions(
-    const VectorSerde::Options* options) {
+    const VectorSerde::Options* options,
+    const PrestoVectorSerde::PrestoOptions& globalOptions) {
   if (options == nullptr) {
-    return PrestoVectorSerde::PrestoOptions();
+    return globalOptions;
   }
   auto prestoOptions =
       dynamic_cast<const PrestoVectorSerde::PrestoOptions*>(options);
   VELOX_CHECK_NOT_NULL(
       prestoOptions, "Serde options are not Presto-compatible");
-  return *prestoOptions;
+
+  return PrestoVectorSerde::PrestoOptions(
+      prestoOptions->useLosslessTimestamp || globalOptions.useLosslessTimestamp,
+      prestoOptions->compressionKind,
+      prestoOptions->nullsFirst,
+      prestoOptions->minCompressionRatio);
 }
 
 FOLLY_ALWAYS_INLINE bool needCompression(const folly::io::Codec& codec) {
@@ -4089,7 +4095,7 @@ PrestoVectorSerde::createIterativeSerializer(
     int32_t numRows,
     StreamArena* streamArena,
     const Options* options) {
-  const auto prestoOptions = toPrestoOptions(options);
+  const auto prestoOptions = toPrestoOptions(options, opts_);
   return std::make_unique<PrestoIterativeVectorSerializer>(
       type, numRows, streamArena, prestoOptions);
 }
@@ -4097,7 +4103,7 @@ PrestoVectorSerde::createIterativeSerializer(
 std::unique_ptr<BatchVectorSerializer> PrestoVectorSerde::createBatchSerializer(
     memory::MemoryPool* pool,
     const Options* options) {
-  const auto prestoOptions = toPrestoOptions(options);
+  const auto prestoOptions = toPrestoOptions(options, opts_);
   return std::make_unique<PrestoBatchVectorSerializer>(pool, prestoOptions);
 }
 
@@ -4177,7 +4183,7 @@ void PrestoVectorSerde::deserialize(
     RowVectorPtr* result,
     vector_size_t resultOffset,
     const Options* options) {
-  const auto prestoOptions = toPrestoOptions(options);
+  const auto prestoOptions = toPrestoOptions(options, opts_);
   const auto codec =
       common::compressionKindToCodec(prestoOptions.compressionKind);
   auto const header = PrestoHeader::read(source);
@@ -4237,7 +4243,7 @@ void PrestoVectorSerde::deserializeSingleColumn(
     TypePtr type,
     VectorPtr* result,
     const Options* options) {
-  const auto prestoOptions = toPrestoOptions(options);
+  const auto prestoOptions = toPrestoOptions(options, opts_);
   VELOX_CHECK_EQ(
       prestoOptions.compressionKind,
       common::CompressionKind::CompressionKind_NONE);
@@ -4262,7 +4268,8 @@ void PrestoVectorSerde::deserializeSingleColumn(
 }
 
 // static
-void PrestoVectorSerde::registerVectorSerde() {
+void PrestoVectorSerde::registerVectorSerde(
+    const PrestoVectorSerde::PrestoOptions& opts) {
   auto toByte = [](int32_t number, int32_t bit) {
     return static_cast<uint64_t>(bits::isBitSet(&number, bit)) << (bit * 8);
   };
@@ -4271,7 +4278,7 @@ void PrestoVectorSerde::registerVectorSerde() {
         toByte(i, 3) | toByte(i, 4) | toByte(i, 5) | toByte(i, 6) |
         toByte(i, 7);
   }
-  velox::registerVectorSerde(std::make_unique<PrestoVectorSerde>());
+  velox::registerVectorSerde(std::make_unique<PrestoVectorSerde>(opts));
 }
 
 namespace {
@@ -4573,7 +4580,7 @@ class PrestoVectorLexer {
     std::string_view source,
     std::vector<Token>& out,
     const Options* options) {
-  const auto prestoOptions = toPrestoOptions(options);
+  const auto prestoOptions = toPrestoOptions(options, {});
 
   VELOX_RETURN_IF(
       prestoOptions.useLosslessTimestamp,
