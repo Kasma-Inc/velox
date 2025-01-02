@@ -16,6 +16,7 @@
 #pragma once
 
 #include <string_view>
+#include <utility>
 
 #include "velox/common/base/Crc.h"
 #include "velox/common/compression/Compression.h"
@@ -50,7 +51,7 @@ class PrestoVectorSerde : public VectorSerde {
  public:
   // Input options that the serializer recognizes.
   struct PrestoOptions : VectorSerde::Options {
-    PrestoOptions() = default;
+    PrestoOptions(){};
 
     PrestoOptions(
         bool _useLosslessTimestamp,
@@ -82,7 +83,8 @@ class PrestoVectorSerde : public VectorSerde {
     bool preserveEncodings{false};
   };
 
-  PrestoVectorSerde() : VectorSerde(Kind::kPresto) {}
+  explicit PrestoVectorSerde(PrestoOptions opts = {})
+      : VectorSerde(Kind::kPresto), opts_(std::move(opts)) {}
 
   /// Adds the serialized sizes of the rows of 'vector' in 'ranges[i]' to
   /// '*sizes[i]'.

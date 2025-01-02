@@ -15,6 +15,7 @@
  */
 
 #include "velox/common/base/tests/GTestUtils.h"
+#include "type/Timestamp.h"
 #include "velox/dwio/parquet/tests/ParquetTestBase.h"
 #include "velox/expression/ExprToSubfieldFilter.h"
 #include "velox/vector/tests/utils/VectorMaker.h"
@@ -1732,4 +1733,28 @@ TEST_F(ParquetReaderTest, fileColumnVarcharToMetadataColumnMismatchTest) {
   for (const auto& type : types) {
     runVarcharColTest(type);
   }
+}
+
+TEST_F(ParquetReaderTest, testReadTimestamp) {
+  const std::string sample(getExampleFilePath("test_read_timestamp.parquet"));
+
+  dwio::common::ReaderOptions readerOptions{leafPool_.get()};
+  auto reader = createReader(sample, readerOptions);
+  EXPECT_EQ(reader->numberOfRows(), 3ULL);
+
+  auto outputRowType = ROW({"c0"}, {TIMESTAMP()});
+  EXPECT_EQ(*(reader->typeWithId()->type()), *outputRowType);
+
+  auto rowReaderOpts = getReaderOpts(outputRowType);
+  rowReaderOpts.setScanSpec(makeScanSpec(outputRowType));
+  auto rowReader = reader->createRowReader(rowReaderOpts);
+
+  auto expected = makeRowVector({makeFlatVector<Timestamp>({
+      Timestamp(0, 1 * Timestamp::kNanosecondsInMillisecond),
+      Timestamp(7 * 60 * 60, 1 * Timestamp::kNanosecondsInMillisecond),
+      Timestamp(1732693111 + 8 * 60 * 60, 0),
+  })});
+
+  assertReadWithReaderAndExpected(
+      outputRowType, *rowReader, expected, *leafPool_);
 }
