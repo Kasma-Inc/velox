@@ -71,6 +71,13 @@ struct TimestampToStringOptions {
   Mode mode = Mode::kFull;
 
   const tz::TimeZone* timeZone = nullptr;
+
+  /// Whether to carry the timezone information in the string.
+  /// If true, the timezone information will be added to the string
+  /// in the format of 'Z' or '+hh:mm' or '-hh:mm'.
+  /// If false, the timezone information will be ignored.
+  /// The default value is false.
+  bool withTimeZone = false;
 };
 
 /// Returns the max length of a converted string from timestamp.

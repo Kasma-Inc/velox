@@ -132,6 +132,34 @@ const int16_t daysBeforeFirstDayOfMonth[][12] = {
     {0, 31, 60, 91, 121, 152, 182, 213, 244, 274, 305, 335},
 };
 
+size_t getTimeZoneStringLength(const TimestampToStringOptions& options) {
+  if (!options.withTimeZone || !options.timeZone) {
+    return 0;
+  }
+
+  if (options.timeZone->id() == 0) {
+    // UTC time zone, 'Z' is used to represent UTC.
+    return 1;
+  }
+
+  return options.timeZone->name().size();
+}
+
+const std::string& getTimeZoneString(const TimestampToStringOptions& options) {
+  static const std::string emptyString;
+  static const std::string utcString = "Z";
+
+  if (!options.withTimeZone || !options.timeZone) {
+    return emptyString;
+  }
+
+  if (options.timeZone->id() == 0) {
+    return utcString;
+  }
+
+  return options.timeZone->name();
+}
+
 } // namespace
 
 bool Timestamp::epochToCalendarUtc(int64_t epoch, std::tm& tm) {
@@ -261,6 +289,16 @@ StringView Timestamp::tmToStringView(
     *writePosition++ = options.dateTimeSeparator;
   }
 
+  const auto& timeZoneStr = getTimeZoneString(options);
+  const auto appendTimeZone = [timeZoneStr](char* const position) -> uint32_t {
+    if (timeZoneStr.empty()) {
+      return 0;
+    }
+
+    std::memcpy(position, timeZoneStr.c_str(), timeZoneStr.size());
+    return timeZoneStr.size();
+  };
+
   // Hour.
   writePosition += appendDigits(tmValue.tm_hour, 2, writePosition);
 
@@ -279,6 +317,7 @@ StringView Timestamp::tmToStringView(
     nanos /= 1'000;
   }
   if (options.skipTrailingZeros && nanos == 0) {
+    writePosition += appendTimeZone(writePosition);
     return StringView(startPosition, writePosition - startPosition);
   }
 
@@ -316,6 +355,7 @@ StringView Timestamp::tmToStringView(
         std::make_error_code(errorCode).message());
     writePosition = position;
   }
+  writePosition += appendTimeZone(writePosition);
   return StringView(startPosition, writePosition - startPosition);
 }
 
@@ -344,9 +384,9 @@ std::string::size_type getMaxStringLength(
       // hh:mm:ss.precision
       return 9 + precisionWidth;
     case TimestampToStringOptions::Mode::kFull:
-      // Timestamp format is %y-%m-%dT%h:%m:%s.precision, where y has 10 digits
-      // at maximum for int32. Possible sign is considered.
-      return 27 + precisionWidth;
+      // Timestamp format is %y-%m-%dT%h:%m:%s.precision[tz], where y has 10
+      // digits at maximum for int32. Possible sign is considered.
+      return 27 + precisionWidth + getTimeZoneStringLength(options);
     default:
       VELOX_UNREACHABLE();
   }
