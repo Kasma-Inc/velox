@@ -76,8 +76,8 @@ EmitInfo getEmitInfo(
   const auto& emit = relCommon.emit();
   int emitSize = emit.output_mapping_size();
   EmitInfo emitInfo;
-  emitInfo.projectNames.reserve(emitSize);
-  emitInfo.expressions.reserve(emitSize);
+  emitInfo.projectNames.resize(emitSize);
+  emitInfo.expressions.resize(emitSize);
   const auto& outputType = node->outputType();
   for (int i = 0; i < emitSize; i++) {
     int32_t mapId = emit.output_mapping(i);
