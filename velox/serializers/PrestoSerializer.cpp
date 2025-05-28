@@ -229,7 +229,7 @@ void PrestoVectorSerde::serializeSingleColumn(
     const Options* opts,
     memory::MemoryPool* pool,
     std::ostream* output) {
-  const auto prestoOptions = toPrestoOptions(opts);
+  const auto prestoOptions = toPrestoOptions(opts, opts_);
   VELOX_USER_CHECK_EQ(
       prestoOptions.compressionKind,
       common::CompressionKind::CompressionKind_NONE);
@@ -259,10 +259,11 @@ void PrestoVectorSerde::registerVectorSerde() {
 }
 
 // static
-void PrestoVectorSerde::registerNamedVectorSerde() {
+void PrestoVectorSerde::registerNamedVectorSerde(
+    const PrestoVectorSerde::PrestoOptions& opts) {
   detail::initBitsToMapOnce();
   velox::registerNamedVectorSerde(
-      VectorSerde::Kind::kPresto, std::make_unique<PrestoVectorSerde>());
+      VectorSerde::Kind::kPresto, std::make_unique<PrestoVectorSerde>(opts));
 }
 
 /* static */ Status PrestoVectorSerde::lex(

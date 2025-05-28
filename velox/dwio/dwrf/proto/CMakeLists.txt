@@ -47,3 +47,5 @@ add_custom_target(dwio_proto ALL DEPENDS ${PROTO_OUTPUT_FILES})
 if(VELOX_MONO_LIBRARY)
   add_dependencies(velox dwio_proto)
 endif()
+
+install(FILES ${PROTO_HDRS} DESTINATION include/velox/dwio/dwrf/proto)

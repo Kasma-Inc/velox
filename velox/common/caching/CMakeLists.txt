@@ -37,3 +37,7 @@ velox_link_libraries(
 if(${VELOX_BUILD_TESTING})
   add_subdirectory(tests)
 endif()
+
+# for access to testing utils only
+install(FILES tests/CacheTestUtil.h
+        DESTINATION include/velox/common/caching/tests)

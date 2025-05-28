@@ -13,7 +13,12 @@
 # limitations under the License.
 
 find_library(STEMMER_LIB libstemmer.a)
+find_path(STEMMER_INCLUDE_PATH libstemmer.h)
 if("${STEMMER_LIB}" STREQUAL "STEMMER_LIB-NOTFOUND")
+  set(stemmer_FOUND false)
+  return()
+endif()
+if("${STEMMER_INCLUDE_PATH}" STREQUAL "STEMMER_INCLUDE_PATH-NOTFOUND")
   set(stemmer_FOUND false)
   return()
 endif()

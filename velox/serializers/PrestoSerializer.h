@@ -185,8 +185,13 @@ class PrestoVectorSerde : public VectorSerde {
       std::vector<Token>& out,
       const Options* options = nullptr);
 
-  static void registerVectorSerde();
-  static void registerNamedVectorSerde();
+  static void registerVectorSerde(
+      const PrestoVectorSerde::PrestoOptions& opts = {});
+  static void registerNamedVectorSerde(
+      const PrestoVectorSerde::PrestoOptions& opts = {});
+
+ private:
+  const PrestoVectorSerde::PrestoOptions opts_;
 };
 
 class PrestoOutputStreamListener : public OutputStreamListener {

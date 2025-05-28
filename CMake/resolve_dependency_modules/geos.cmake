@@ -31,7 +31,8 @@ FetchContent_Declare(
 
 list(APPEND CMAKE_MODULE_PATH "${geos_SOURCE_DIR}/cmake")
 set(BUILD_SHARED_LIBS ${VELOX_BUILD_SHARED})
-set(CMAKE_BUILD_TYPE Release)
+# Must use the same build type for cmake install, otherwise the imported
+# location will not be found for geos set(CMAKE_BUILD_TYPE Release)
 set(PREVIOUS_CMAKE_CXX_FLAGS ${CMAKE_CXX_FLAGS})
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}  -Wno-nonnull ")
 
@@ -48,4 +49,4 @@ add_library(GEOS::geos ALIAS geos)
 
 unset(BUILD_SHARED_LIBS)
 set(CMAKE_CXX_FLAGS ${PREVIOUS_CMAKE_CXX_FLAGS})
-set(CMAKE_BUILD_TYPE ${PREVIOUS_BUILD_TYPE})
+# set(CMAKE_BUILD_TYPE ${PREVIOUS_BUILD_TYPE})

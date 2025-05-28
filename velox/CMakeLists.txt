@@ -99,3 +99,6 @@ install(
   FILES_MATCHING
   PATTERN "*.inc"
   PATTERN "*.h")
+
+install(FILES external/xxhash/xxhash.h
+        DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
