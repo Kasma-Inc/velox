@@ -51,8 +51,8 @@ class ReaderBase {
     return pool_;
   }
 
-  dwio::common::BufferedInput& bufferedInput() const {
-    return *input_;
+  const std::shared_ptr<dwio::common::BufferedInput>& bufferedInput() const {
+    return input_;
   }
 
   uint64_t fileLength() const {
@@ -91,22 +91,11 @@ class ReaderBase {
     return version_;
   }
 
-  /// Ensures that streams are enqueued and loading for the row group at
-  /// 'currentGroup'. May start loading one or more subsequent groups.
-  void scheduleRowGroups(
-      const std::vector<uint32_t>& groups,
-      int32_t currentGroup,
-      StructColumnReader& reader);
-
   /// Returns the uncompressed size for columns in 'type' and its children in
   /// row group.
   int64_t rowGroupUncompressedSize(
       int32_t rowGroupIndex,
       const dwio::common::TypeWithId& type) const;
-
-  /// Checks whether the specific row group has been loaded and
-  /// the data still exists in the buffered inputs.
-  bool isRowGroupBuffered(int32_t rowGroupIndex) const;
 
  private:
   // Reads and parses file footer.
@@ -148,10 +137,6 @@ class ReaderBase {
   std::shared_ptr<const dwio::common::TypeWithId> schemaWithId_;
 
   std::optional<SemanticVersion> version_;
-
-  // Map from row group index to pre-created loading BufferedInput.
-  std::unordered_map<uint32_t, std::shared_ptr<dwio::common::BufferedInput>>
-      inputs_;
 };
 
 ReaderBase::ReaderBase(
@@ -986,25 +971,6 @@ std::shared_ptr<const RowType> ReaderBase::createRowType(
       std::move(childNames), std::move(childTypes));
 }
 
-void ReaderBase::scheduleRowGroups(
-    const std::vector<uint32_t>& rowGroupIds,
-    int32_t currentGroup,
-    StructColumnReader& reader) {
-  auto numRowGroupsToLoad = std::min(
-      options_.prefetchRowGroups() + 1,
-      static_cast<int64_t>(rowGroupIds.size() - currentGroup));
-  for (auto i = 0; i < numRowGroupsToLoad; i++) {
-    auto thisGroup = rowGroupIds[currentGroup + i];
-    if (!inputs_[thisGroup]) {
-      inputs_[thisGroup] = reader.loadRowGroup(thisGroup, input_);
-    }
-  }
-
-  if (currentGroup >= 1) {
-    inputs_.erase(rowGroupIds[currentGroup - 1]);
-  }
-}
-
 int64_t ReaderBase::rowGroupUncompressedSize(
     int32_t rowGroupIndex,
     const dwio::common::TypeWithId& type) const {
@@ -1021,10 +987,6 @@ int64_t ReaderBase::rowGroupUncompressedSize(
     sum += rowGroupUncompressedSize(rowGroupIndex, *child);
   }
   return sum;
-}
-
-bool ReaderBase::isRowGroupBuffered(int32_t rowGroupIndex) const {
-  return inputs_.count(rowGroupIndex) != 0;
 }
 
 class ParquetRowReader::Impl {
@@ -1047,7 +1009,7 @@ class ParquetRowReader::Impl {
           "Input Name: {},\n"
           "File Footer Schema (without partition columns): {},\n"
           "Input Table Schema (with partition columns): {}\n",
-          readerBase_->bufferedInput().getReadFile()->getName(),
+          readerBase_->bufferedInput()->getReadFile()->getName(),
           readerBase_->schema()->toString(),
           requestedType_->toString());
       return exceptionMessageContext;
@@ -1192,7 +1154,7 @@ class ParquetRowReader::Impl {
   }
 
   bool isRowGroupBuffered(int32_t rowGroupIndex) const {
-    return readerBase_->isRowGroupBuffered(rowGroupIndex);
+    return inputs_.count(rowGroupIndex) != 0;
   }
 
  private:
@@ -1202,10 +1164,27 @@ class ParquetRowReader::Impl {
     }
 
     auto nextRowGroupIndex = rowGroupIds_[nextRowGroupIdsIdx_];
-    readerBase_->scheduleRowGroups(
-        rowGroupIds_,
-        nextRowGroupIdsIdx_,
-        static_cast<StructColumnReader&>(*columnReader_));
+
+    {
+      // Ensures that streams are enqueued and loading for the row group at
+      // 'nextRowGroupIdsIdx_'. May start loading one or more subsequent groups.
+      auto& options = readerBase_->options();
+      auto numRowGroupsToLoad = std::min(
+          options.prefetchRowGroups() + 1,
+          static_cast<int64_t>(rowGroupIds_.size() - nextRowGroupIdsIdx_));
+      auto& reader = static_cast<StructColumnReader&>(*columnReader_);
+      for (auto i = 0; i < numRowGroupsToLoad; i++) {
+        auto thisGroup = rowGroupIds_[nextRowGroupIdsIdx_ + i];
+        if (!inputs_[thisGroup]) {
+          inputs_[thisGroup] =
+              reader.loadRowGroup(thisGroup, readerBase_->bufferedInput());
+        }
+      }
+      if (nextRowGroupIdsIdx_ >= 1) {
+        inputs_.erase(rowGroupIds_[nextRowGroupIdsIdx_ - 1]);
+      }
+    }
+
     currentRowGroupPtr_ = &rowGroups_[rowGroupIds_[nextRowGroupIdsIdx_]];
     rowsInCurrentRowGroup_ = currentRowGroupPtr_->num_rows;
     currentRowInGroup_ = 0;
@@ -1236,6 +1215,10 @@ class ParquetRowReader::Impl {
   ParquetStatsContext parquetStatsContext_;
 
   dwio::common::ColumnReaderStatistics columnReaderStats_;
+
+  // Map from row group index to pre-created loading BufferedInput.
+  std::unordered_map<uint32_t, std::shared_ptr<dwio::common::BufferedInput>>
+      inputs_;
 };
 
 ParquetRowReader::ParquetRowReader(
