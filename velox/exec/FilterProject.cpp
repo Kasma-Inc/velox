@@ -14,25 +14,109 @@
  * limitations under the License.
  */
 #include "velox/exec/FilterProject.h"
+#include "velox/common/base/Exceptions.h"
 #include "velox/core/Expressions.h"
 #include "velox/expression/Expr.h"
 #include "velox/expression/FieldReference.h"
 
 namespace facebook::velox::exec {
 namespace {
+/// Resolves an output field name from a Concat expression to its ultimate
+/// top-level input column.
+///
+/// This is used to detect identity projections in expression trees containing
+/// nested field accesses or concatenations. The function requires:
+///   1. The root expression must be a Concat
+///   2. The target name must exist in the Concat's output type
+///   3. The resolution path must consist solely of FieldAccess/Dereference
+///   nodes
+///
+/// For example, a Concat expression like:
+///   Concat(
+///     inputs: {
+///        c1: Dereference(index=1, base=Row("a", "b")),
+///        c2: FieldAccess(name="a", base=Row("a", "b"))
+///     },
+///     output: Row(c1, c2)
+///   )
+///   resolveTopLevelInputName(concat, "c1") -> "b"
+///   resolveTopLevelInputName(concat, "c2") -> "a"
+///
+/// @param expr  Must be a Concat expression (other types return nullopt)
+/// @param name  Output field name in the Concat's result row
+/// @return      Ultimate top-level column name if resolvable through
+///              FieldAccess/Dereference chain, else nullopt
+std::optional<std::string_view> resolveTopLevelInputName(
+    const core::TypedExprPtr& expr,
+    const std::string& name) {
+  if (auto concat = core::TypedExprs::asConcat(expr)) {
+    const auto& type = concat->type();
+    const auto& inputs = concat->inputs();
+    const auto& row_type = type->asRow();
+
+    VELOX_DCHECK(
+        row_type.containsChild(name),
+        "Concat output type does not contain field: {}",
+        name);
+
+    auto idx = row_type.getChildIdx(name);
+    const auto& childExpr = inputs[idx];
+
+    if (auto field = core::TypedExprs::asFieldAccess(childExpr)) {
+      const auto& nestedInputs = field->inputs();
+      if (nestedInputs.empty()) {
+        // Leaf field access, return current name.
+        return field->name();
+      }
+
+      VELOX_DCHECK_EQ(nestedInputs.size(), 1);
+      if (core::TypedExprs::isInput(nestedInputs[0])) {
+        // Field is directly on a top-level input.
+        return field->name();
+      }
+
+      return resolveTopLevelInputName(nestedInputs[0], field->name());
+    } else if (auto deref = core::TypedExprs::asDereference(childExpr)) {
+      const auto& nestedInputs = deref->inputs();
+      VELOX_DCHECK_EQ(nestedInputs.size(), 1);
+      return resolveTopLevelInputName(nestedInputs[0], deref->name());
+    }
+  }
+
+  // Not resolvable to a top-level input.
+  return std::nullopt;
+}
+
+/// Attempts to recognize whether a projection is a direct passthrough from the
+/// input. If so, records it in identityProjections and returns true.
 bool checkAddIdentityProjection(
     const core::TypedExprPtr& projection,
     const RowTypePtr& inputType,
     column_index_t outputChannel,
     std::vector<IdentityProjection>& identityProjections) {
+  auto tryAddIdentity = [&](std::string_view inputName) -> bool {
+    const auto inputChannel = inputType->getChildIdx(inputName);
+    identityProjections.emplace_back(inputChannel, outputChannel);
+    return true;
+  };
+
   if (auto field = core::TypedExprs::asFieldAccess(projection)) {
     const auto& inputs = field->inputs();
     if (inputs.empty() ||
-        (inputs.size() == 1 &&
-         dynamic_cast<const core::InputTypedExpr*>(inputs[0].get()))) {
-      const auto inputChannel = inputType->getChildIdx(field->name());
-      identityProjections.emplace_back(inputChannel, outputChannel);
-      return true;
+        (inputs.size() == 1 && core::TypedExprs::isInput(inputs[0]))) {
+      return tryAddIdentity(field->name());
+    }
+
+    auto resolved = resolveTopLevelInputName(inputs[0], field->name());
+    if (resolved.has_value()) {
+      return tryAddIdentity(resolved.value());
+    }
+
+  } else if (auto deref = core::TypedExprs::asDereference(projection)) {
+    const auto& inputs = deref->inputs();
+    auto resolved = resolveTopLevelInputName(inputs[0], deref->name());
+    if (resolved.has_value()) {
+      return tryAddIdentity(resolved.value());
     }
   }
 
