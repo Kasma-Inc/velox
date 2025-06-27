@@ -55,6 +55,8 @@ class InputTypedExpr : public ITypedExpr {
   static TypedExprPtr create(const folly::dynamic& obj, void* context);
 };
 
+using InputTypedExprPtr = std::shared_ptr<const InputTypedExpr>;
+
 class ConstantTypedExpr : public ITypedExpr {
  public:
   // Creates constant expression. For complex types, only
@@ -727,6 +729,37 @@ class TypedExprs {
   /// Returns 'expr' as LambdaTypedExprPtr or null if not a lambda expression.
   static LambdaTypedExprPtr asLambda(const TypedExprPtr& expr) {
     return std::dynamic_pointer_cast<const LambdaTypedExpr>(expr);
+  }
+
+  /// Returns true if 'expr' is a dereference expression.
+  static bool isDereference(const TypedExprPtr& expr) {
+    return dynamic_cast<const DereferenceTypedExpr*>(expr.get()) != nullptr;
+  }
+
+  /// Returns 'expr' as DereferenceTypedExprPtr or null if not dereference
+  /// expression.
+  static DereferenceTypedExprPtr asDereference(const TypedExprPtr& expr) {
+    return std::dynamic_pointer_cast<const DereferenceTypedExpr>(expr);
+  }
+
+  /// Returns true if 'expr' is a concat expression.
+  static bool isConcat(const TypedExprPtr& expr) {
+    return dynamic_cast<const ConcatTypedExpr*>(expr.get()) != nullptr;
+  }
+
+  /// Returns 'expr' as ConcatTypedExprPtr or null if not a concat expression.
+  static ConcatTypedExprPtr asConcat(const TypedExprPtr& expr) {
+    return std::dynamic_pointer_cast<const ConcatTypedExpr>(expr);
+  }
+
+  /// Returns true if 'expr' is a input expression.
+  static bool isInput(const TypedExprPtr& expr) {
+    return dynamic_cast<const InputTypedExpr*>(expr.get()) != nullptr;
+  }
+
+  /// Returns 'expr' as ConcatTypedExprPtr or null if not a input expression.
+  static InputTypedExprPtr asInput(const TypedExprPtr& expr) {
+    return std::dynamic_pointer_cast<const InputTypedExpr>(expr);
   }
 };
 
