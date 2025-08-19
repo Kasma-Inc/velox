@@ -123,6 +123,14 @@ uint64_t SharedArbitrator::ExtraConfig::memoryPoolReservedCapacity(
       config::CapacityUnit::BYTE);
 }
 
+bool SharedArbitrator::ExtraConfig::reclaimUsedMemoryByAbortEnabled(
+    const std::unordered_map<std::string, std::string>& configs) {
+  return getConfig<bool>(
+      configs,
+      kReclaimUsedMemoryByAbortEnabled,
+      kDefaultReclaimUsedMemoryByAbortEnabled);
+}
+
 uint64_t SharedArbitrator::ExtraConfig::maxMemoryArbitrationTimeNs(
     const std::unordered_map<std::string, std::string>& configs) {
   return std::chrono::duration_cast<std::chrono::nanoseconds>(
@@ -242,6 +250,8 @@ SharedArbitrator::SharedArbitrator(const Config& config)
       arbitrationStateCheckCb_(config.arbitrationStateCheckCb),
       reservedCapacity_(ExtraConfig::reservedCapacity(config.extraConfigs)),
       checkUsageLeak_(ExtraConfig::checkUsageLeak(config.extraConfigs)),
+      reclaimUsedMemoryByAbortEnabled_(
+          ExtraConfig::reclaimUsedMemoryByAbortEnabled(config.extraConfigs)),
       maxArbitrationTimeNs_(
           ExtraConfig::maxMemoryArbitrationTimeNs(config.extraConfigs)),
       participantConfig_(
@@ -300,6 +310,8 @@ SharedArbitrator::SharedArbitrator(const Config& config)
   if (globalArbitrationEnabled_) {
     VELOX_MEM_LOG(INFO) << "Arbitration config: max arbitration time "
                         << succinctNanos(maxArbitrationTimeNs_)
+                        << ", reclaim used memory by abort "
+                        << reclaimUsedMemoryByAbortEnabled_
                         << ", global memory reclaim percentage "
                         << globalArbitrationMemoryReclaimPct_
                         << ", global arbitration abort time ratio "
@@ -936,6 +948,10 @@ bool SharedArbitrator::globalArbitrationShouldReclaimByAbort(
     bool hasReclaimedByAbort,
     bool allParticipantsReclaimed,
     uint64_t lastReclaimedBytes) const {
+  if (!reclaimUsedMemoryByAbortEnabled_) {
+    return false;
+  }
+
   return globalArbitrationWithoutSpill_ ||
       (globalRunElapsedTimeNs >
            maxArbitrationTimeNs_ * globalArbitrationAbortTimeRatio_ &&

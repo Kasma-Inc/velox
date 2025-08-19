@@ -76,6 +76,14 @@ class SharedArbitrator : public memory::MemoryArbitrator {
     static uint64_t memoryPoolReservedCapacity(
         const std::unordered_map<std::string, std::string>& configs);
 
+    /// Config to enable/disable reclaiming used memory by aborting memory
+    /// pools.
+    static constexpr std::string_view kReclaimUsedMemoryByAbortEnabled{
+        "reclaim-used-memory-by-abort-enabled"};
+    static constexpr bool kDefaultReclaimUsedMemoryByAbortEnabled{true};
+    static bool reclaimUsedMemoryByAbortEnabled(
+        const std::unordered_map<std::string, std::string>& configs);
+
     /// Specifies the max time to wait for memory reclaim by arbitration. The
     /// memory reclaim might fail if the max time has exceeded. This prevents
     /// the memory arbitration from getting stuck when the memory reclaim waits
@@ -603,6 +611,7 @@ class SharedArbitrator : public memory::MemoryArbitrator {
   const MemoryArbitrationStateCheckCB arbitrationStateCheckCb_;
   const uint64_t reservedCapacity_;
   const bool checkUsageLeak_;
+  const bool reclaimUsedMemoryByAbortEnabled_;
   const uint64_t maxArbitrationTimeNs_;
   const ArbitrationParticipant::Config participantConfig_;
   const double memoryReclaimThreadsHwMultiplier_;
